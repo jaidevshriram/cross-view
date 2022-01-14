@@ -126,7 +126,8 @@ class Trainer:
         dataset_dict = {"3Dobject": crossView.KITTIObject,
                         "odometry": crossView.KITTIOdometry,
                         "argo": crossView.Argoverse,
-                        "raw": crossView.KITTIRAW}
+                        "raw": crossView.KITTIRAW,
+                        "habitat": crossView.Habitat}
 
         self.dataset = dataset_dict[self.opt.split]
         fpath = os.path.join(
@@ -171,6 +172,7 @@ class Trainer:
         if not os.path.isdir(self.opt.log_root):
             os.mkdir(self.opt.log_root)
 
+        self.validation(self.log)
         for self.epoch in range(self.start_epoch, self.opt.num_epochs + 1):
             self.adjust_learning_rate(self.model_optimizer, self.epoch, self.opt.lr_steps)
             loss = self.run_epoch()

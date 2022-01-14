@@ -74,7 +74,8 @@ def evaluate():
     dataset_dict = {"3Dobject": crossView.KITTIObject,
                     "odometry": crossView.KITTIOdometry,
                     "argo": crossView.Argoverse,
-                    "raw": crossView.KITTIRAW}
+                    "raw": crossView.KITTIRAW,
+                    "habitat": crossView.Habitat}
 
     dataset = dataset_dict[opt.split]
     fpath = os.path.join(
@@ -113,6 +114,9 @@ def evaluate():
                 outputs["transform_topview"].detach(),
                 1).cpu().numpy())
         true = np.squeeze(inputs[opt.type + "_gt"].detach().cpu().numpy())
+        
+        # print(pred.shape, true.shape)
+        
         iou += mean_IU(pred, true)
         mAP += mean_precision(pred, true)
         trans_iou += mean_IU(trans_pred, true)
@@ -124,6 +128,7 @@ def evaluate():
     trans_mAP /= len(test_loader)
 
     print("Evaluation Results: mIOU: %.4f mAP: %.4f" % (iou[1], mAP[1]))
+    print("Evaluation Results: mIoU (class 0) %.4f mAP: %.4f" % (iou[0], mAP[0]))
 
 
 def process_batch(opt, models, inputs):

@@ -11,9 +11,10 @@ def get_args():
                             './datasets/argoverse',
                             './datasets/kitti/object/training',
                             './datasets/kitti/odometry',
-                            './datasets/kitti/raw'],
+                            './datasets/kitti/raw',
+                            './datasets/'],
                         help="Path to the root data directory")
-    parser.add_argument("--save_path", type=str, default="./models/",
+    parser.add_argument("--save_path", type=str, default="/scratch/jaidev/models/",
                         help="Path to save models")
     parser.add_argument(
         "--load_weights_folder",
@@ -29,6 +30,7 @@ def get_args():
             "argo",
             "3Dobject",
             "odometry",
+            "habitat",
             "raw"],
         help="Data split for training/validation")
     parser.add_argument("--ext", type=str, default="png",
@@ -98,7 +100,8 @@ def get_eval_args():
             "argo",
             "3Dobject",
             "odometry",
-            "raw"],
+            "raw",
+            "habitat"],
         help="Data split for training/validation")
     parser.add_argument("--ext", type=str, default="png",
                         help="File extension of the images")

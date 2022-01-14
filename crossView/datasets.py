@@ -27,9 +27,12 @@ def process_topview(topview, size):
     topview = topview.convert("1")
     topview = topview.resize((size, size), pil.NEAREST)
     topview = topview.convert("L")
+
     topview = np.array(topview)
     topview_n = np.zeros(topview.shape)
     topview_n[topview == 255] = 1  # [1.,0.]
+
+
     return topview_n
 
 
@@ -370,3 +373,117 @@ class Argoverse(MonoDataset):
 
         self.preprocess(inputs, color_aug)
         return inputs
+
+class Habitat(data.Dataset):
+    def __init__(self, opt, filenames, is_train=True):
+        super(Habitat, self).__init__()
+
+        self.opt = opt
+        self.data_path = self.opt.data_path
+        self.filenames = filenames
+        self.is_train = is_train
+        self.height = self.opt.height
+        self.width = self.opt.width
+        self.interp = pil.ANTIALIAS
+        self.loader = pil_loader
+        self.crop = transforms.CenterCrop(480)
+        self.to_tensor = transforms.ToTensor()
+
+        try:
+            self.brightness = (0.8, 1.2)
+            self.contrast = (0.8, 1.2)
+            self.saturation = (0.8, 1.2)
+            self.hue = (-0.1, 0.1)
+            transforms.ColorJitter.get_params(
+                self.brightness, self.contrast, self.saturation, self.hue)
+        except TypeError:
+            self.brightness = 0.2
+            self.contrast = 0.2
+            self.saturation = 0.2
+            self.hue = 0.1
+
+        self.resize = transforms.Resize(
+            (self.height, self.width), interpolation=self.interp)
+
+        self.scene_to_base = {}
+        bases = ['/scratch/jaidev/HabitatGibson/data/']
+        for base in bases:
+            for scene in os.listdir(base):
+                self.scene_to_base[scene] = base
+
+        self.scene_to_bevbase = {}
+        bases = ['/scratch/jaidev/HabitatGibson/bevs/partial_occupancy/']
+        for base in bases:
+            for scene in os.listdir(base):
+                self.scene_to_bevbase[scene] = base
+
+    def preprocess(self, inputs, color_aug):
+
+        inputs["color"] = self.crop(inputs["color"])
+        inputs["color"] = color_aug(self.resize(inputs["color"]))
+
+        for key in inputs.keys():
+            if key != "color" and "discr" not in key:
+                # print(key, "1", inputs[key].size)
+                inputs[key] = process_topview(
+                    inputs[key], self.opt.occ_map_size)
+                # print(key, "2", inputs[key].shape)
+                inputs[key] = self.to_tensor(inputs[key][np.newaxis, :])
+            else:
+                inputs[key] = self.to_tensor(inputs[key])
+
+    def __len__(self):
+        return len(self.filenames)
+
+    def __getitem__(self, index):
+        inputs = {}
+
+        do_color_aug = self.is_train and random.random() > 0.5
+        do_flip = self.is_train and random.random() > 0.5
+
+        folder, frame_index = self.filenames[index].split()
+        side = "l"
+        # check this part from original code if the dataset is changed
+
+        inputs["color"] = self.get_color(folder, frame_index, do_flip)
+        
+        inputs["static"] = self.get_static(
+            folder, frame_index, do_flip)
+        inputs["static_gt"] = inputs["static"]
+
+        if do_color_aug:
+            color_aug = transforms.ColorJitter.get_params(
+                self.brightness, self.contrast, self.saturation, self.hue)
+        else:
+            color_aug = (lambda x: x)
+
+        self.preprocess(inputs, color_aug)
+        inputs["filename"] = frame_index
+
+        return inputs
+
+    def get_color(self, folder, frame_index, do_flip):
+        frame_no = frame_index
+
+        color = self.loader(os.path.join(self.scene_to_base[folder], folder, '0', 'left_rgb', frame_no + ".jpg"))
+
+        if do_flip:
+            color = color.transpose(pil.FLIP_LEFT_RIGHT)
+
+        return color
+
+    def get_static(self, folder, frame_index, do_flip):
+        frame_no = frame_index
+
+        tv = cv2.imread(os.path.join(self.scene_to_bevbase[folder], folder, frame_no +
+            ".png"), -1) / 255
+        #print(np.min(tv), np.max(tv))
+        tv[tv > 0.8] = 1.0
+        tv[tv <= 0.8] = 0.0
+
+        tv = pil.fromarray(np.uint8(tv * 255), 'L')
+
+        if do_flip:
+            tv = tv.transpose(pil.FLIP_LEFT_RIGHT)
+
+        return tv.convert('L')
