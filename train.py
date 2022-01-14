@@ -204,6 +204,8 @@ class Trainer:
         transform_feature, retransform_features = self.models["CycledViewProjection"](features)
         features = self.models["CrossViewTransformer"](features, transform_feature, retransform_features)
 
+        # print(inputs["static"].shape)
+
         outputs["topview"] = self.models["decoder"](features)
         outputs["transform_topview"] = self.models["transform_decoder"](transform_feature)
         if validation:

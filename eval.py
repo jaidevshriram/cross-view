@@ -98,13 +98,51 @@ def evaluate():
     for batch_idx, inputs in tqdm.tqdm(enumerate(test_loader)):
         with torch.no_grad():
             outputs = process_batch(opt, models, inputs)
+
+        # Predicted Topview
         save_topview(
             inputs["filename"],
             outputs["topview"],
             os.path.join(
                 opt.out_dir,
-                'topview',
+                'pred',
                 "{}.png".format(inputs["filename"][0])))
+
+        # Get the unresized GT topview
+        gt_64_tp = cv2.imread(os.path.join(
+            "/scratch/jaidev/HabitatGibson/bevs",
+            "partial_occupancy",
+            inputs["folder"][0],
+            "{}.png".format(inputs["filename"][0])
+        ))
+
+        # Save unresized GT topview
+        save_gt_unresized_topview(
+            inputs["filename"],
+            gt_64_tp,
+            os.path.join(
+                opt.out_dir,
+                "unresized_gt",
+                "{}.png".format(inputs["filename"][0])))
+
+        # Groundtruth topview
+        save_gt_topview(
+            inputs["filename"],
+            inputs[opt.type + "_gt"],
+            os.path.join(
+                opt.out_dir,
+                opt.type + "_gt",
+                "{}.png".format(inputs["filename"][0])))
+         
+        # Save the RGB image!
+        save_img(
+            inputs["filename"],
+            inputs["color"],
+            os.path.join(
+                opt.out_dir,
+                'rgb',
+                 "{}.png".format(inputs["filename"][0])))
+
         pred = np.squeeze(
             torch.argmax(
                 outputs["topview"].detach(),
@@ -114,28 +152,28 @@ def evaluate():
                 outputs["transform_topview"].detach(),
                 1).cpu().numpy())
         true = np.squeeze(inputs[opt.type + "_gt"].detach().cpu().numpy())
-        
-        # print(pred.shape, true.shape)
-        
+                
         iou += mean_IU(pred, true)
         mAP += mean_precision(pred, true)
+
         trans_iou += mean_IU(trans_pred, true)
         trans_mAP += mean_precision(trans_pred, true)
+
     iou /= len(test_loader)
     mAP /= len(test_loader)
 
     trans_iou /= len(test_loader)
     trans_mAP /= len(test_loader)
 
-    print("Evaluation Results: mIOU: %.4f mAP: %.4f" % (iou[1], mAP[1]))
-    print("Evaluation Results: mIoU (class 0) %.4f mAP: %.4f" % (iou[0], mAP[0]))
+    print("Evaluation Results: mIoU (0) %.4f mAP (0): %.4f | mIOU (1): %.4f mAP (1): %.4f" % (iou[0], mAP[0], iou[1], mAP[1]))
+    print("Evaluation Results (Transformed Layout): mIoU (0) %.4f mAP (0): %.4f | mIOU (1): %.4f mAP (1): %.4f" % (trans_iou[0], trans_mAP[0], trans_iou[1], trans_mAP[1]))
 
 
 def process_batch(opt, models, inputs):
     outputs = {}
     # print(inputs["filename"])
     for key, input_ in inputs.items():
-        if key != "filename":
+        if key not in ["filename", "folder", "frame_index"]:
             inputs[key] = input_.to("cuda")
 
     features = models["encoder"](inputs["color"])
@@ -158,9 +196,28 @@ def save_topview(idx, tv, name_dest_im):
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
     cv2.imwrite(name_dest_im, true_top_view)
-
     # print("Saved prediction to {}".format(name_dest_im))
 
+def save_gt_topview(idx, tv, name_dest_im):
+    tv_np = tv.squeeze().cpu().numpy()
+    dir_name = os.path.dirname(name_dest_im)
+    if not os.path.exists(dir_name):
+        os.makedirs(dir_name)
+    cv2.imwrite(name_dest_im, tv_np * 255)
+
+def save_gt_unresized_topview(idx, tv, name_dest_im):
+    dir_name = os.path.dirname(name_dest_im)
+    if not os.path.exists(dir_name):
+        os.makedirs(dir_name)
+    cv2.imwrite(name_dest_im, tv)
+
+def save_img(idx, tv, name_dest_img):
+    tv_np = tv.squeeze().cpu().numpy()
+    dir_name = os.path.dirname(name_dest_img)
+    if not os.path.exists(dir_name):
+        os.makedirs(dir_name)
+
+    cv2.imwrite(name_dest_img, tv_np.transpose((1, 2, 0)) * 255)
 
 if __name__ == "__main__":
     evaluate()

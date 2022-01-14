@@ -1,0 +1,1 @@
+CUDA_VISIBLE_DEVICES=0 python3 eval.py --type static --split habitat --pretrained_path /scratch/jaidev/models/habitat/habitat_test/weights_55/ --data_path ./datasets/odometry/ --height 1024 --width 1024 --occ_map_size 256

@@ -32,6 +32,8 @@ def process_topview(topview, size):
     topview_n = np.zeros(topview.shape)
     topview_n[topview == 255] = 1  # [1.,0.]
 
+    topview_n = topview_n[:, :, np.newaxis]
+    # print("process", topview_n.shape)
 
     return topview_n
 
@@ -423,14 +425,11 @@ class Habitat(data.Dataset):
         inputs["color"] = color_aug(self.resize(inputs["color"]))
 
         for key in inputs.keys():
-            if key != "color" and "discr" not in key:
-                # print(key, "1", inputs[key].size)
+            if "static" in key and "discr" not in key:
                 inputs[key] = process_topview(
                     inputs[key], self.opt.occ_map_size)
-                # print(key, "2", inputs[key].shape)
-                inputs[key] = self.to_tensor(inputs[key][np.newaxis, :])
-            else:
-                inputs[key] = self.to_tensor(inputs[key])
+                # print(inputs[key].shape, "preprocess shape")
+            inputs[key] = self.to_tensor(inputs[key])
 
     def __len__(self):
         return len(self.filenames)
@@ -451,6 +450,8 @@ class Habitat(data.Dataset):
             folder, frame_index, do_flip)
         inputs["static_gt"] = inputs["static"]
 
+        # print(inputs["static"].size, "static")
+
         if do_color_aug:
             color_aug = transforms.ColorJitter.get_params(
                 self.brightness, self.contrast, self.saturation, self.hue)
@@ -459,6 +460,11 @@ class Habitat(data.Dataset):
 
         self.preprocess(inputs, color_aug)
         inputs["filename"] = frame_index
+
+        if not self.is_train:
+            inputs["folder"] = folder
+            
+        inputs["frame_index"] = frame_index
 
         return inputs
 
@@ -477,7 +483,6 @@ class Habitat(data.Dataset):
 
         tv = cv2.imread(os.path.join(self.scene_to_bevbase[folder], folder, frame_no +
             ".png"), -1) / 255
-        #print(np.min(tv), np.max(tv))
         tv[tv > 0.8] = 1.0
         tv[tv <= 0.8] = 0.0
 
