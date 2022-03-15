@@ -459,7 +459,7 @@ class Habitat(data.Dataset):
             color_aug = (lambda x: x)
 
         self.preprocess(inputs, color_aug)
-        inputs["filename"] = frame_index
+        inputs["filename"] = index
 
         if not self.is_train:
             inputs["folder"] = folder

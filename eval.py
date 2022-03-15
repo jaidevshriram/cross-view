@@ -82,7 +82,7 @@ def evaluate():
         os.path.dirname(__file__),
         "splits",
         opt.split,
-        "{}_files.txt")
+        "gibson_8fid_{}.txt")
     test_filenames = readlines(fpath.format("val"))
     test_dataset = dataset(opt, test_filenames, is_train=False)
     test_loader = DataLoader(
@@ -93,11 +93,16 @@ def evaluate():
         pin_memory=True,
         drop_last=True)
 
+    ious = []
+
     iou, mAP = np.array([0., 0.]), np.array([0., 0.])
     trans_iou, trans_mAP = np.array([0., 0.]), np.array([0., 0.])
     for batch_idx, inputs in tqdm.tqdm(enumerate(test_loader)):
         with torch.no_grad():
             outputs = process_batch(opt, models, inputs)
+
+        scene = inputs['folder'][0]
+        # print(inputs["filename"][0])
 
         # Predicted Topview
         save_topview(
@@ -106,14 +111,15 @@ def evaluate():
             os.path.join(
                 opt.out_dir,
                 'pred',
-                "{}.png".format(inputs["filename"][0])))
+                scene,
+                "{}.png".format(inputs["frame_index"][0])))
 
         # Get the unresized GT topview
         gt_64_tp = cv2.imread(os.path.join(
             "/scratch/jaidev/HabitatGibson/bevs",
             "partial_occupancy",
             inputs["folder"][0],
-            "{}.png".format(inputs["filename"][0])
+            "{}.png".format(inputs["frame_index"][0])
         ))
 
         # Save unresized GT topview
@@ -123,7 +129,8 @@ def evaluate():
             os.path.join(
                 opt.out_dir,
                 "unresized_gt",
-                "{}.png".format(inputs["filename"][0])))
+                scene,
+                "{}.png".format(inputs["frame_index"][0])))
 
         # Groundtruth topview
         save_gt_topview(
@@ -132,7 +139,8 @@ def evaluate():
             os.path.join(
                 opt.out_dir,
                 opt.type + "_gt",
-                "{}.png".format(inputs["filename"][0])))
+                scene,
+                "{}.png".format(inputs["frame_index"][0])))
          
         # Save the RGB image!
         save_img(
@@ -141,7 +149,8 @@ def evaluate():
             os.path.join(
                 opt.out_dir,
                 'rgb',
-                 "{}.png".format(inputs["filename"][0])))
+                scene,
+                 "{}.png".format(inputs["frame_index"][0])))
 
         pred = np.squeeze(
             torch.argmax(
@@ -159,6 +168,11 @@ def evaluate():
         trans_iou += mean_IU(trans_pred, true)
         trans_mAP += mean_precision(trans_pred, true)
 
+        score = mean_IU(pred, true)
+        score2 = mean_precision(pred, true)
+        # print(score, score2)
+        ious.append(score[1])
+
     iou /= len(test_loader)
     mAP /= len(test_loader)
 
@@ -168,6 +182,174 @@ def evaluate():
     print("Evaluation Results: mIoU (0) %.4f mAP (0): %.4f | mIOU (1): %.4f mAP (1): %.4f" % (iou[0], mAP[0], iou[1], mAP[1]))
     print("Evaluation Results (Transformed Layout): mIoU (0) %.4f mAP (0): %.4f | mIOU (1): %.4f mAP (1): %.4f" % (trans_iou[0], trans_mAP[0], trans_iou[1], trans_mAP[1]))
 
+    # Top 10 examples
+    ious = np.array(ious)
+    sorted_iou_index = np.argsort(ious)[::-1]
+    print(ious[sorted_iou_index])
+    print("Top examples:")
+
+    for i in range(len(sorted_iou_index[:25])):
+
+        batch_idx = sorted_iou_index[i]
+
+        inputs = None
+        for batch_idx_data, inputs_data in enumerate(test_loader):
+            if batch_idx == batch_idx_data:
+                inputs = inputs_data
+                break
+
+        with torch.no_grad():
+            outputs = process_batch(opt, models, inputs)
+
+        scene = inputs['folder'][0]
+        # print(inputs["filename"][0])
+
+        # Predicted Topview
+        save_topview(
+            inputs["filename"],
+            outputs["topview"],
+            os.path.join(
+                opt.out_dir,
+                "top",
+                'pred',
+                scene,
+                "{}.png".format(inputs["frame_index"][0])))
+
+        # Get the unresized GT topview
+        gt_64_tp = cv2.imread(os.path.join(
+            "/scratch/jaidev/HabitatGibson/bevs",
+            "partial_occupancy",
+            inputs["folder"][0],
+            "{}.png".format(inputs["frame_index"][0])
+        ))
+
+        # Save unresized GT topview
+        save_gt_unresized_topview(
+            inputs["filename"],
+            gt_64_tp,
+            os.path.join(
+                opt.out_dir,
+                "top",
+                "unresized_gt",
+                scene,
+                "{}.png".format(inputs["frame_index"][0])))
+
+        # Groundtruth topview
+        save_gt_topview(
+            inputs["filename"],
+            inputs[opt.type + "_gt"],
+            os.path.join(
+                opt.out_dir,
+                "top",
+                opt.type + "_gt",
+                scene,
+                "{}.png".format(inputs["frame_index"][0])))
+         
+        # Save the RGB image!
+        save_img(
+            inputs["filename"],
+            inputs["color"],
+            os.path.join(
+                opt.out_dir,
+                "top",
+                'rgb',
+                scene,
+                 "{}.png".format(inputs["frame_index"][0])))
+
+        pred = np.squeeze(
+            torch.argmax(
+                outputs["topview"].detach(),
+                1).cpu().numpy())
+        trans_pred = np.squeeze(
+            torch.argmax(
+                outputs["transform_topview"].detach(),
+                1).cpu().numpy())
+        true = np.squeeze(inputs[opt.type + "_gt"].detach().cpu().numpy())
+                
+        print("IoU", mean_IU(pred, true), "mAP", mean_precision(pred, true))
+
+    # bottom 10 examples
+    sorted_iou_index = np.argsort(ious)
+    print("Worst examples:")
+
+    for i in range(len(sorted_iou_index[-25:])):
+        batch_idx = sorted_iou_index[i]
+
+        inputs = None
+        for batch_idx_data, inputs_data in enumerate(test_loader):
+            if batch_idx == batch_idx_data:
+                inputs = inputs_data
+                break
+
+        with torch.no_grad():
+            outputs = process_batch(opt, models, inputs)
+
+        scene = inputs['folder'][0]
+        # print(inputs["filename"][0])
+
+        # Predicted Topview
+        save_topview(
+            inputs["filename"],
+            outputs["topview"],
+            os.path.join(
+                opt.out_dir,
+                "worst",
+                'pred',
+                scene,
+                "{}.png".format(inputs["frame_index"][0])))
+
+        # Get the unresized GT topview
+        gt_64_tp = cv2.imread(os.path.join(
+            "/scratch/jaidev/HabitatGibson/bevs",
+            "partial_occupancy",
+            inputs["folder"][0],
+            "{}.png".format(inputs["frame_index"][0])
+        ))
+
+        # Save unresized GT topview
+        save_gt_unresized_topview(
+            inputs["filename"],
+            gt_64_tp,
+            os.path.join(
+                opt.out_dir,
+                "worst",
+                "unresized_gt",
+                scene,
+                "{}.png".format(inputs["frame_index"][0])))
+
+        # Groundtruth topview
+        save_gt_topview(
+            inputs["filename"],
+            inputs[opt.type + "_gt"],
+            os.path.join(
+                opt.out_dir,
+                "worst",
+                opt.type + "_gt",
+                scene,
+                "{}.png".format(inputs["frame_index"][0])))
+         
+        # Save the RGB image!
+        save_img(
+            inputs["filename"],
+            inputs["color"],
+            os.path.join(
+                opt.out_dir,
+                "worst",
+                'rgb',
+                scene,
+                 "{}.png".format(inputs["frame_index"][0])))
+
+        pred = np.squeeze(
+            torch.argmax(
+                outputs["topview"].detach(),
+                1).cpu().numpy())
+        trans_pred = np.squeeze(
+            torch.argmax(
+                outputs["transform_topview"].detach(),
+                1).cpu().numpy())
+        true = np.squeeze(inputs[opt.type + "_gt"].detach().cpu().numpy())
+                
+        print("IoU", mean_IU(pred, true), "mAP", mean_precision(pred, true))
 
 def process_batch(opt, models, inputs):
     outputs = {}

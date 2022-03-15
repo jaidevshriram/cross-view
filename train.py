@@ -194,7 +194,7 @@ class Trainer:
     def process_batch(self, inputs, validation=False):
         outputs = {}
         for key, input in inputs.items():
-            if key != "filename":
+            if key not in ["filename", "folder", "frame_index"]:
                 inputs[key] = input.to(self.device)
 
         features = self.models["encoder"](inputs["color"])
@@ -257,7 +257,8 @@ class Trainer:
             mAP += mean_precision(pred, true)
         iou /= len(self.val_loader)
         mAP /= len(self.val_loader)
-        output = ("Epoch: %d | Validation: mIOU: %.4f mAP: %.4f" % (self.epoch, iou[1], mAP[1]))
+#        output = ("Epoch: %d | Validation: mIOU: %.4f mAP: %.4f" % (self.epoch, iou[1], mAP[1]))
+        output = ("Epoch: %d | mIoU (0) %.4f mAP (0): %.4f | mIOU (1): %.4f mAP (1): %.4f" % (self.epoch, iou[0], mAP[0], iou[1], mAP[1]))
         print(output)
         log.write(output + '\n')
         log.flush()

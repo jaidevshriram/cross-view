@@ -71,7 +71,7 @@ def get_args():
                         help="Number of classes")
     parser.add_argument("--num_epochs", type=int, default=120,
                         help="Max number of training epochs")
-    parser.add_argument("--log_frequency", type=int, default=5,
+    parser.add_argument("--log_frequency", type=int, default=1,
                         help="Log files every x epochs")
     parser.add_argument("--num_workers", type=int, default=8,
                         help="Number of cpu workers for dataloaders")
